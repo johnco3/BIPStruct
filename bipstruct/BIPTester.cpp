@@ -45,10 +45,10 @@ namespace Shared {
         {}
 
         // @JC - delete default move/copy assignment/ctors
-        MyStruct(MyStruct const&) = default;
-        MyStruct(MyStruct&&) = default;
-        MyStruct& operator=(MyStruct const&) = default;
-        MyStruct& operator=(MyStruct&&) = default;
+        //MyStruct(MyStruct const&) = default;
+        //MyStruct(MyStruct&&) = default;
+        //MyStruct& operator=(MyStruct const&) = default;
+        //MyStruct& operator=(MyStruct&&) = default;
 
         //! Move constructor with allocator_arg_t.
         //! @JC specialization constructible_with_allocator_prefix<X>::value is true,
@@ -80,7 +80,7 @@ namespace Shared {
         int b = 0;
         //! Nested IPC container of POD data
         Vec<uint8_t> data;
-    //private:
+    private:
         //! Hidden  constructor (@JC not sure why - to hide the allocator as it is not the first arg?).
         explicit MyStruct(int a, int b, Vec<uint8_t> data)
             : a{ a }
@@ -125,7 +125,7 @@ int
 main()
 {
     using Shared::MyStruct;
-    Shared::Segment mf(bip::open_or_create, "test.bin", 65536);
+    Shared::Segment mf(bip::open_or_create, "test.bin", 65536*2);
     auto mgr = mf.get_segment_manager();
 
     auto& db = *mf.find_or_construct<Shared::Database>("complex")(mgr);
