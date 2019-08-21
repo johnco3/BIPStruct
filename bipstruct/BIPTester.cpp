@@ -10,6 +10,8 @@
 namespace bip = boost::interprocess;
 
 namespace Shared {
+    // @JC Note changed from coliru's managed_mapped_file
+    // in futile attempt to fix teh read access violation.
     using Segment = bip::managed_shared_memory;
     using SMgr = Segment::segment_manager;
 
@@ -18,7 +20,8 @@ namespace Shared {
     template <typename T> using ScopedAlloc =
         boost::container::scoped_allocator_adaptor<Alloc<T>>;
 
-    using String = bip::basic_string<char, std::char_traits<char>, Alloc<char>>;
+    using String = bip::basic_string<
+        char, std::char_traits<char>, Alloc<char>>;
 
     using boost::interprocess::map;
 
@@ -28,38 +31,44 @@ namespace Shared {
     template <typename K, typename T> using Map =
         map<K, T, std::less<K>, ScopedAlloc<typename map<K, T>::value_type>>;
 
-    struct MyPodStruct {
+    //! This is user struct that I want to manage in shared memory
+    struct MyStruct {
         using allocator_type = ScopedAlloc<char>;
 
-        explicit MyPodStruct(allocator_type alloc) : data(alloc) {}
-        //MyPodStruct(MyPodStruct const&) = default;
-        //MyPodStruct(MyPodStruct&&) = default;
-        //MyPodStruct& operator=(MyPodStruct const&) = default;
-        //MyPodStruct& operator=(MyPodStruct&&) = default;
+        explicit MyStruct(allocator_type alloc) : data(alloc) {}
+        //MyStruct(MyStruct const&) = default;
+        //MyStruct(MyStruct&&) = default;
+        //MyStruct& operator=(MyStruct const&) = default;
+        //MyPodStruct& operator=(MyStruct&&) = default;
 
         // Move constructor with allocator_arg_t
-        MyPodStruct(std::allocator_arg_t, allocator_type, MyPodStruct&& rhs)
-            : MyPodStruct(std::move(rhs))
+        MyStruct(std::allocator_arg_t, allocator_type, MyStruct&& rhs)
+            : MyStruct(std::move(rhs))
         {}
 
         // copy constructor with allocator_arg_t
-        MyPodStruct(std::allocator_arg_t, allocator_type, MyPodStruct const& rhs)
-            : MyPodStruct(rhs)
+        MyStruct(std::allocator_arg_t, allocator_type, const MyStruct& rhs)
+            : MyStruct(rhs)
         {}
 
         template <typename I, typename A = Alloc<char>>
-        MyPodStruct(std::allocator_arg_t, A alloc, int a, int b, I && init)
-            : MyPodStruct(a, b, Vec<uint8_t>(std::forward<I>(init), alloc)) { }
+        MyStruct(std::allocator_arg_t, A alloc, int a, int b, I && init)
+            : MyStruct(a, b, Vec<uint8_t>(std::forward<I>(init), alloc)) { }
 
         int a = 0; // simplify default constructor using NSMI
         int b = 0;
         Vec<uint8_t> data;
 
     private:
-        explicit MyPodStruct(int a, int b, Vec<uint8_t> data) : a(a), b(b), data(std::move(data)) {}
+        //! Hidden  pr
+        explicit MyStruct(int a, int b, Vec<uint8_t> data)
+            : a(a)
+            , b(b)
+            , data(std::move(data))
+        {}
     };
 
-    using Database = Map<String, MyPodStruct>;
+    using Database = Map<String, MyStruct>;
 
     static inline std::ostream& operator<<(std::ostream& os, Database const& db) {
         os << "db has " << db.size() << " elements:";
@@ -93,8 +102,8 @@ public:
 
 int main() {
 
-    using Shared::MyPodStruct;
-    Shared::Segment mf(bip::open_or_create, "test.bin", 165536); // smaller for Coliru
+    using Shared::MyStruct;
+    Shared::Segment mf(bip::open_or_create, "test.bin", 65536);
     auto mgr = mf.get_segment_manager();
 
     auto& db = *mf.find_or_construct<Shared::Database>("complex")(mgr);
@@ -112,10 +121,10 @@ int main() {
     std::cout << "\n=== Before updates\n" << db << std::endl;
 
     // Clumsy:
-    db[Shared::String("one", mgr)] = MyPodStruct{ std::allocator_arg, mgr, 1, 20, Bytes{ 7, 8, 9 } };
+    db[Shared::String("one", mgr)] = MyStruct{ std::allocator_arg, mgr, 1, 20, Bytes{ 7, 8, 9 } };
 
     // As efficient or better, and less clumsy:
-    auto insert_or_update = [&db](auto&& key, auto&& ... initializers) -> MyPodStruct & {
+    auto insert_or_update = [&db](auto&& key, auto&& ... initializers) -> MyStruct & {
         // Be careful not to move twice: https://en.cppreference.com/w/cpp/container/map/emplace
         // > The element may be constructed even if there already is an element
         // > with the key in the container, in which case the newly constructed
@@ -123,7 +132,7 @@ int main() {
         if (auto insertion = db.emplace(pw, forward_as_tuple(key), std::tie(initializers...)); insertion.second) {
             return insertion.first->second;
         } else {
-            return insertion.first->second = MyPodStruct(
+            return insertion.first->second = MyStruct(
                 std::allocator_arg,
                 db.get_allocator(),
                 std::forward<decltype(initializers)>(initializers)...); // forwarding ok here
