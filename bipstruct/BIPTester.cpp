@@ -40,7 +40,8 @@ namespace Shared {
         using allocator_type = ScopedAlloc<char>;
 
         //! Explicit default constructor.
-        explicit MyStruct(allocator_type alloc)
+        //! @JC modified to take const& like vector
+        explicit MyStruct(const allocator_type& alloc)
             : data(alloc)
         {}
 
@@ -136,6 +137,20 @@ main()
     // More magic: piecewise construction protocol :)
     static constexpr std::piecewise_construct_t pw{};
     using std::forward_as_tuple;
+
+    // @JC Debugging - try constructing with explicit args
+    MyStruct tempStruct(
+        std::allocator_arg,
+        db.get_allocator(), 1, 2,
+        std::initializer_list<uint8_t>{1, 2, 3});
+
+    //! @JC Debugging - Hmm... this does not work
+    //! @JC Do not know why if piecewise_construct
+    //! @JC below works????
+    //MyStruct tempStruct1(
+    //    std::allocator_arg,
+    //    db.get_allocator(),
+    //    forward_as_tuple(1, 2, Bytes{ 1, 2 }));
     db.emplace(pw, forward_as_tuple("one"), forward_as_tuple(1, 2, Bytes{ 1, 2 }));
     db.emplace(pw, forward_as_tuple("two"), forward_as_tuple(2, 3, Bytes{ 4 }));
     db.emplace(pw, forward_as_tuple("three"), forward_as_tuple(3, 4, Bytes{ 5, 8 }));
