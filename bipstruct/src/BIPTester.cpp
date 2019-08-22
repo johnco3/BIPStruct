@@ -24,7 +24,9 @@ int
 main()
 {
     using Shared::MyStruct;
-    Shared::Segment mf(Shared::bip::open_or_create, "test.bin", 65536*2);
+    //! @JC Changing to larger size to prevent
+    //! @JC Read access violation workaround suggestion - did not work.
+    Shared::Segment mf(Shared::bip::open_or_create, "test.bin", 65536);
     auto mgr = mf.get_segment_manager();
 
     auto& db = *mf.find_or_construct<Shared::Database>("complex")(mgr);
@@ -36,19 +38,20 @@ main()
     static constexpr std::piecewise_construct_t pw{};
     using std::forward_as_tuple;
 
-    // @JC Debugging - try constructing with explicit args
+    //! @JC - debugging only - construct via explicit args
     MyStruct tempStruct(
         std::allocator_arg,
         db.get_allocator(), 1, 2,
         std::initializer_list<uint8_t>{1, 2, 3});
 
-    //! @JC Debugging - Hmm... this does not work
-    //! @JC Do not know why if piecewise_construct
-    //! @JC below works????
-    //MyStruct tempStruct1(
-    //    std::allocator_arg,
-    //    db.get_allocator(),
-    //    forward_as_tuple(1, 2, Bytes{ 1, 2 }));
+#if 0
+    //! @JC - how can I get this to work
+    MyStruct tempStruct1(
+        std::allocator_arg,
+        db.get_allocator(),
+        forward_as_tuple(1, 2, Bytes{ 1, 2 }));
+#endif
+    //! @JC - emplace below causes read access violation
     db.emplace(pw, forward_as_tuple("one"), forward_as_tuple(1, 2, Bytes{ 1, 2 }));
     db.emplace(pw, forward_as_tuple("two"), forward_as_tuple(2, 3, Bytes{ 4 }));
     db.emplace(pw, forward_as_tuple("three"), forward_as_tuple(3, 4, Bytes{ 5, 8 }));
@@ -64,11 +67,14 @@ main()
         // > The element may be constructed even if there already is an element
         // > with the key in the container, in which case the newly constructed
         // > element will be destroyed immediately.
-        // @JC If initializer (C++17)
+        // @JC (C++17) If initializer
+        // @JC (C++17) for example on how these are expanded and used in the 2 arg 'printer' lambda parameter
         if (auto insertion = db.emplace(pw, forward_as_tuple(key), std::tie(initializers...)); insertion.second) {
             return insertion.first->second;
         } else {
-            // @JC note initializers is parameter pack
+            // @JC (C++17) 'initializers' parameter pack expansion
+            // @JC (C++17) perfect forwarded to MyStruct templated constructor
+            // @JC (C++17) an initializer list
             return insertion.first->second = MyStruct(
                 std::allocator_arg, db.get_allocator(),
                 std::forward<decltype(initializers)>(initializers)...); // forwarding ok here
