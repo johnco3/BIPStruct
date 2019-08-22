@@ -1,8 +1,8 @@
 /*
-** (c) Copyright 2018 Gables Engineering, Inc.  All rights reserved.
+**
 **
 ** File name:
-** Author: John P. Coffey
+** Author:
 **
 ** DESCRIPTION
 **
